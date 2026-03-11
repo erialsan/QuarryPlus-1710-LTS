@@ -1,32 +1,19 @@
-# Quarry Plus rinsuki modified version
-
-[![Azure DevOps builds](https://img.shields.io/azure-devops/build/rinsuki/9a572861-dbec-4ce7-8ec0-af37fb3aa12b/2)](https://dev.azure.com/rinsuki/QuarryPlus-1710-rinsukimodified/_build?definitionId=2)
+# Quarry Plus 1.7.10 LTS
 
 QuarryPlus に、 @rinsuki が改変を加えたバージョンです。
 
 ## サポートしている環境
 
 - Minecraft 1.7.10
-- Buildcraft 7.1.23以上
-- IC2ex 2.2.828以上 (必須ではない?)
-- NEI 1.0.5.120以上 (必須ではない?)
+- Buildcraft GTNH
+- IC2ex (必須ではない)
+- NEI GTNH (必須ではない)
 
 ## ダウンロード
 
 ### 安定版
 
 まだ安定してない気がするのでもうちょいまってね
-
-### 不安定版 (スナップショット)
-
-[Azure Pipelinesのビルド一覧](https://dev.azure.com/rinsuki/QuarryPlus-1710-rinsukimodified/_build?definitionId=2) から、
-
-- 希望するビルドを選択
-- 右上のArtifacts → Job
-- Jobフォルダを開く
-- jarフォルダを開く
-- QuarryPlus-modifiedbyrinsuki-1.7.10-2.1.1.jarをクリックすると現れる「…」をクリック
-- Download
 
 でダウンロードできるjarファイルをMinecraftのmodsフォルダに入れれば完了です。
 
