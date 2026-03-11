@@ -1,6 +1,6 @@
 # Quarry Plus 1.7.10 LTS
 
-QuarryPlus に、 @rinsuki が改変を加えたバージョンです。
+GTNH用に最適化したQuarry Plusです
 
 ## サポートしている環境
 
