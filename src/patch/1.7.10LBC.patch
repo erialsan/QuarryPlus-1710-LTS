@@ -1,0 +1,193 @@
+--- a/com/yogpc/qp/compat/RefineryRecipeHelper.java
++++ b/com/yogpc/qp/compat/RefineryRecipeHelper.java
+@@ -14,74 +14,50 @@
+ import cpw.mods.fml.common.ModAPIManager;
+ import cpw.mods.fml.common.Optional;
+ 
+-@Optional.Interface(iface = "buildcraft.api.recipes.IFlexibleCrafter",
+-    modid = "BuildCraftAPI|recipes")
+-public class RefineryRecipeHelper implements IFlexibleCrafter {
+-  private final TileRefinery tile;
+-
+-  private RefineryRecipeHelper(final TileRefinery tr) {
+-    this.tile = tr;
+-  }
+-
+-  @Override
+-  public int getCraftingItemStackSize() {
+-    return 0;
+-  }
+-
+-  @Override
+-  public ItemStack getCraftingItemStack(final int slotid) {
+-    return null;
+-  }
+-
+-  // BC 6.2.X or later
+-  public ItemStack decrCraftingItemStack(final int slotid, final int val) {
+-    return null;
+-  }
+-
+-  // BC 6.1.X
+-  public ItemStack decrCraftingItemgStack(final int slotid, final int val) {
+-    return null;
+-  }
+-
+-  @Override
+-  public FluidStack getCraftingFluidStack(final int id) {
+-    return this.tile.src[id];
+-  }
+-
+-  @Override
+-  public FluidStack decrCraftingFluidStack(final int id, final int val) {
+-    final FluidStack ret = this.tile.src[id];
+-    if (ret == null)
+-      return null;
+-    if (val >= ret.amount) {
+-      this.tile.src[id] = null;
+-      return ret;
++public class RefineryRecipeHelper {
++  private static void use(final FluidStack fs, final TileRefinery tr, final boolean real) {
++    if (fs == null)
++      return;
++    for (final FluidStack s : tr.src) {
++      if (!fs.isFluidEqual(s))
++        continue;
++      final int min = Math.min(s.amount, fs.amount);
++      if (real)
++        s.amount -= min;
++      fs.amount -= min;
++      if (fs.amount <= 0)
++        break;
+     }
+-    this.tile.src[id] = ret.copy();
+-    this.tile.src[id].amount -= val;
+-    ret.amount = val;
+-    return ret;
++    if (real)
++      for (int i = tr.src.length - 1; i >= 0; i--)
++        if (tr.src[i] != null && tr.src[i].amount == 0)
++          tr.src[i] = null;
+   }
+ 
+-  @Override
+-  public int getCraftingFluidStackSize() {
+-    return this.tile.src.length;
++  private static boolean craft(final IRefineryRecipeManager.IRefineryRecipe r, final TileRefinery t, final boolean real) {
++    FluidStack f1 = r.getIngredient1(), f2 = r.getIngredient2();
++    if (f1 != null)
++      f1 = f1.copy();
++    if (f2 != null)
++      f2 = f2.copy();
++    use(f1, t, real);
++    use(f2, t, real);
++    return (f1 == null || f1.amount <= 0) && (f2 == null || f2.amount <= 0);
+   }
+ 
+   public static void get(final TileRefinery tr) {
+     if (!ModAPIManager.INSTANCE.hasAPI("BuildCraftAPI|recipes") || tr.cached != null)
+       return;
+-    final IRefineryRecipeManager irrm = BuildcraftRecipeRegistry.refinery;
++    final IRefineryRecipeManager irrm = BuildcraftRecipes.refinery;
+     if (irrm == null)
+       return;
+-    for (final IFlexibleRecipe<FluidStack> ifr : irrm.getRecipes()) {
+-      final CraftingResult<FluidStack> cr = ifr.craft(new RefineryRecipeHelper(tr), true);
+-      if (cr == null || !check(cr.crafted, tr))
++    for (final IRefineryRecipeManager.IRefineryRecipe ifr : irrm.getRecipes()) {
++      if (!craft(ifr, tr, false) || !RefineryRecipeHelper.check(ifr.getResult(), tr))
+         continue;
+-      ifr.craft(new RefineryRecipeHelper(tr), false);
+-      tr.rem_energy = (double) cr.energyCost / 10;
+-      tr.rem_time = cr.craftingTime;
+-      tr.cached = cr.crafted.copy();
++      craft(ifr, tr, true);
++      tr.rem_energy = ifr.getEnergyCost();
++      tr.rem_time = ifr.getTimeRequired();
++      tr.cached = ifr.getResult().copy();
+       get(tr);
+       return;
+     }
+--- a/com/yogpc/qp/QuarryPlus.java
++++ b/com/yogpc/qp/QuarryPlus.java
+@@ -22,7 +22,7 @@
+     modid = "QuarryPlus",
+     name = "QuarryPlus",
+     version = "{version}",
+-    dependencies = "after:BuildCraftAPI|core;after:BuildCraftAPI|recipes;after:BuildCraftAPI|tools;after:BuildCraftAPI|transport;after:CoFHAPI|block;after:CoFHAPI|energy;after:CoFHAPI|inventory;after:IC2")
++    dependencies = "after:BuildCraftAPI|core;after:BuildCraftAPI|power;after:BuildCraftAPI|recipes;after:BuildCraftAPI|tools;after:BuildCraftAPI|transport;after:CoFHAPI|block;after:CoFHAPI|energy;after:CoFHAPI|inventory;after:IC2")
+ public class QuarryPlus {
+   @SidedProxy(clientSide = "com.yogpc.qp.ProxyClient", serverSide = "com.yogpc.qp.ProxyCommon")
+   public static ProxyCommon proxy;
+--- a/com/yogpc/qp/tile/APowerTile.java
++++ b/com/yogpc/qp/tile/APowerTile.java
+@@ -13,8 +13,11 @@
+ 
+ @Optional.InterfaceList(value = {
+     @Optional.Interface(iface = "cofh.api.energy.IEnergyHandler", modid = "CoFHAPI|energy"),
++    @Optional.Interface(iface = "buildcraft.api.power.IPowerReceptor", modid = "BuildCraftAPI|power"),
+     @Optional.Interface(iface = "ic2.api.energy.tile.IEnergySink", modid = "IC2")})
+-public abstract class APowerTile extends APacketTile implements IEnergyHandler, IEnergySink {
++public abstract class APowerTile extends APacketTile implements IEnergyHandler, IEnergySink,
++    IPowerReceptor {
++  private final PowerHandler pp = new PowerHandler(this, PowerHandler.Type.MACHINE);
+   private double all, maxGot, max, got;
+   private boolean ic2ok = false;
+ 
+@@ -29,6 +32,8 @@
+         }
+       this.ic2ok = true;
+     }
++    final double rem = Math.min(this.maxGot - this.got, this.max - this.all - this.got);
++    this.got += this.pp.useEnergy(0, rem, true);
+     this.all += this.got;
+     this.got = 0;
+   }
+@@ -57,6 +62,7 @@
+     this.all = nbttc.getDouble("storedEnergy");
+     this.max = nbttc.getDouble("MAX_stored");
+     this.maxGot = nbttc.getDouble("MAX_receive");
++    this.pp.configure(0, this.maxGot, 0, this.max);
+   }
+ 
+   @Override
+@@ -101,6 +107,7 @@
+   public final void configure(final double x, final double maxstored) {
+     this.maxGot = x;
+     this.max = maxstored;
++    this.pp.configure(0, this.maxGot, 0, this.max);
+   }
+ 
+   @Override
+@@ -147,4 +154,18 @@
+   public final boolean acceptsEnergyFrom(final TileEntity te, final ForgeDirection d) {
+     return true;
+   }
++
++  @Override
++  public final PowerHandler.PowerReceiver getPowerReceiver(final ForgeDirection side) {
++    return this.pp.getPowerReceiver();
++  }
++
++  @Override
++  public final void doWork(final PowerHandler workProvider) {}
++
++  @Override
++  public final World getWorld() {
++    return this.worldObj;
++  }
++
+ }
+--- a/com/yogpc/qp/tile/TileLaser.java
++++ b/com/yogpc/qp/tile/TileLaser.java
+@@ -86,8 +86,8 @@
+         PowerManager.useEnergyL(this, this.unbreaking, this.fortune, this.silktouch,
+             this.efficiency);
+     for (final Object lt : this.laserTargets)
+-      ILaserTargetHelper.receiveLaserEnergy(lt, 10 * power / this.laserTargets.size());
+-    pushPower(10 * power / this.laserTargets.size());
++      ILaserTargetHelper.receiveLaserEnergy(lt, power / this.laserTargets.size());
++    pushPower(power / this.laserTargets.size());
+     if (this.worldObj.getWorldTime() % 20 == 7)
+       PacketHandler.sendPacketToAround(new YogpstopPacket(this),
+           this.worldObj.provider.dimensionId, this.xCoord, this.yCoord, this.zCoord);
